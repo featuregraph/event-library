@@ -1,12 +1,8 @@
 from state_detection.state_operators import smooth, rising_state, falling_state, enter_state, exit_state, event_number
-def add_wave_features(
-    df,
-    signal,
-    group="simulation_run",
-    smooth_window=20,
-    diff_lag=10,
-    eps=0,
-):
+
+def add_wave_features(df, signal, group, smooth_window=20, diff_lag=10, eps=0):
+    df = df.copy()
+
     smooth_col = f"{signal}_smooth"
     rising_col = f"{signal}_rising"
     falling_col = f"{signal}_falling"
@@ -14,25 +10,39 @@ def add_wave_features(
     exit_col = f"exit_{rising_col}"
     wave_col = f"{signal}_wave_num"
 
-    df[smooth_col] = smooth(df, signal, group, smooth_window)
-
-    df[rising_col] = (
-        df.groupby(group)[smooth_col]
-          .transform(lambda s: rising_state(s, lag=diff_lag, eps=eps))
+    df[smooth_col] = (
+        df.groupby(group)[signal]
+          .transform(lambda s: s.rolling(smooth_window, min_periods=smooth_window).mean())
     )
 
-    df[falling_col] = (
+    delta = (
         df.groupby(group)[smooth_col]
-          .transform(lambda s: falling_state(s, lag=diff_lag, eps=eps))
+          .transform(lambda s: s.diff(diff_lag))
     )
 
-    df[enter_col] = enter_state(df[rising_col], df[group])
-    df[exit_col] = exit_state(df[rising_col], df[group])
-    df[wave_col] = event_number(df[enter_col], df[group])
+    df[rising_col] = delta > eps
+    df[falling_col] = delta < -eps
+
+    df[enter_col] = (
+        df.groupby(group)[rising_col]
+          .transform(lambda s: s.astype(int).diff().eq(1))
+    )
+
+    df[exit_col] = (
+        df.groupby(group)[rising_col]
+          .transform(lambda s: s.astype(int).diff().eq(-1))
+    )
+
+    df[wave_col] = (
+        df.groupby(group)[enter_col]
+          .transform(lambda s: s.cumsum())
+    )
 
     return df
 
-def measure_wave(df, wave_col, signals, group="simulation_run"):
+def measure_wave(df, wave_col, signals, group):
+    group_cols = group + [wave_col] if isinstance(group, list) else [group, wave_col]
+
     agg_spec = {}
 
     for signal in signals:
@@ -41,7 +51,7 @@ def measure_wave(df, wave_col, signals, group="simulation_run"):
         agg_spec[f"{signal}_mean"] = (signal, "mean")
 
     waves = (
-        df.groupby([group, wave_col])
+        df.groupby(group_cols)
           .agg(**agg_spec)
           .reset_index()
     )
