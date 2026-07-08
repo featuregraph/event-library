@@ -1,30 +1,31 @@
 from state_detection.operators.events import enter_state, exit_state, event_number
 from state_detection.operators.signals import smooth
 
-def add_timeseries_features(df, signal, group, smooth_window=20, diff_lag=10, eps=0):
+def add_timeseries_features(df, signals, group, smooth_window=20, diff_lag=10, eps=0):
     df = df.copy()
 
-    smooth_col = f"{signal}_smooth"
-    rising_col = f"{signal}_rising"
-    falling_col = f"{signal}_falling"
-    enter_col = f"enter_{rising_col}"
-    exit_col = f"exit_{rising_col}"
-    wave_col = f"{signal}_wave_num"
+    for signal in signals:
+        smooth_col = f"{signal}_smooth"
+        rising_col = f"{signal}_rising"
+        falling_col = f"{signal}_falling"
+        enter_col = f"enter_{rising_col}"
+        exit_col = f"exit_{rising_col}"
+        wave_col = f"{signal}_wave_num"
 
-    df[smooth_col] = smooth(df, signal, group, smooth_window)
+        df[smooth_col] = smooth(df, signal, group, smooth_window)
 
-    delta = (
-        df.groupby(group)[smooth_col]
-          .transform(lambda s: s.diff(diff_lag))
-    )
+        delta = (
+            df.groupby(group)[smooth_col]
+              .transform(lambda s: s.diff(diff_lag))
+        )
 
-    df[rising_col] = delta > eps
-    df[falling_col] = delta < -eps
+        df[rising_col] = delta > eps
+        df[falling_col] = delta < -eps
 
-    df[enter_col] = enter_state(df[rising_col])
-    df[exit_col] = exit_state(df[rising_col])
+        df[enter_col] = enter_state(df[rising_col])
+        df[exit_col] = exit_state(df[rising_col])
 
-    df[wave_col] = event_number(df, enter_col, group)
+        df[wave_col] = event_number(df, enter_col, group)
 
     return df
 
