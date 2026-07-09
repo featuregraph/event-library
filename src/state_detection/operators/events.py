@@ -12,7 +12,7 @@ def exit_state(state, group=None):
     return x.groupby(group).diff().eq(-1)
 
 
-def event_number(df, enter_col, group=None):
+def event_id(df, enter_col, group=None):
     if group is None:
         return df[enter_col].cumsum()
     return df.groupby(group)[enter_col].cumsum()
