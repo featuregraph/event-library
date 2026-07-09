@@ -1,45 +1,6 @@
 from state_detection.operators.events import enter_state, exit_state, event_number
 from state_detection.operators.meaasures import smooth
 from state_detection.operators.states import rising_state, falling_state
-def add_summary_features(df, signal, group):
-    group_cols = group if isinstance(group, list) else [group]
-
-    wave_col = f"{signal}_wave_num"
-    rising_col = f"{signal}_rising"
-    falling_col = f"{signal}_falling"
-    smooth_col = f"{signal}_smooth"
-
-    summarydf = (
-        df.groupby(group_cols + [wave_col])
-          .agg(
-              **{
-                  f"{signal}_rise_time": (rising_col, "sum"),
-                  f"{signal}_fall_time": (falling_col, "sum"),
-                  f"{signal}_peak": (smooth_col, "max"),
-                  f"{signal}_trough": (smooth_col, "min"),
-                  f"{signal}_peak_index": (
-                      "sample",
-                      lambda s: s.iloc[df.loc[s.index, smooth_col].argmax()]
-                  ),
-              }
-          )
-    )
-
-    summarydf[f"{signal}_amplitude"] = (
-        summarydf[f"{signal}_peak"] - summarydf[f"{signal}_trough"]
-    ) / 2
-
-    summarydf[f"{signal}_wave_duration"] = (
-        summarydf[f"{signal}_rise_time"] +
-        summarydf[f"{signal}_fall_time"]
-    )
-
-    summarydf = summarydf[
-        (summarydf.index.get_level_values(wave_col) > 0) &
-        (summarydf[f"{signal}_wave_duration"] >= 5)
-    ]
-
-    return summarydf
 
 def add_summary_comparison_features(summarydf, signal, group):
     summarydf = summarydf.copy()
