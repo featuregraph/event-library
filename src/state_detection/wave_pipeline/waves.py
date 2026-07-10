@@ -1,6 +1,7 @@
 from state_detection.operators.states import rising_state, falling_state
-from state_detection.operators.events import enter_state, exit_state, event_id
-from state_detection.operators.measures import smooth, group_transform
+from state_detection.operators.events import enter_state, exit_state, event_id, event_index
+from state_detection.operators.measures import smooth, group_transform, group_map
+import numpy as np
 
 def add_wave_smoothing(df, signals, group, window=20):
     df = df.copy()
@@ -16,18 +17,22 @@ def add_wave_primitives(df, signals, diff_lag=10, eps=0):
         falling_col = f"{signal}_falling"
         enter_rising_col = f"enter_{rising_col}"
         exit_rising_col = f"exit_{rising_col}"
+        peak_index = f'{signal}_peak_index'
+        trough_index = f'{signal}_trough_index'
 
         df[rising_col] = rising_state(df[signal], diff_lag, eps)
         df[falling_col] = falling_state(df[signal], diff_lag, eps)
         df[enter_rising_col] = enter_state(df[rising_col])
         df[exit_rising_col] = exit_state(df[rising_col])
+        df[peak_index] = event_index(df, exit_rising_col)
+        df[trough_index] = event_index(df, enter_rising_col)
 
     return df
 
-def add_wave_id(df, signals, group, id_col):
+def add_wave_id(df, signals, group):
     df = df.copy()
     for signal in signals:
-        df[f"{signal}_wave_id"] = event_id(df, id_col, group)
+        df[f"{signal}_wave_id"] = event_id(df, f'enter_{signal}_rising', group)
     return df
 
 def add_wave_features(df, signals, group):
@@ -44,6 +49,17 @@ def add_wave_features(df, signals, group):
                                      group_transform(df, signal, 'min', group)) / 2
         df[f'{signal}_duration'] = group_transform(df, rising_time_col, 'max', group) + \
                                     group_transform(df, falling_time_col, 'max', group)
+
     return df
 
+def add_inter_wave_features(df, signals, group):
+    for signal in signals:
+        df[f'{signal}_previous_amplitude'] = group_map(df, f'{signal}_amplitude', 'max', group, offset=1)
+        df[f'{signal}_period'] = group_map(df, f'{signal}_peak_index', 'max', group, offset=0) - \
+                                 group_map(df, f'{signal}_peak_index', 'max', group, offset=1)
+        df[f"{signal}_log_decrement"] = np.log(df[f"{signal}_previous_amplitude"] / df[f"{signal}_amplitude"])
+        df[f"{signal}_damping_ratio"] = df[f"{signal}_log_decrement"] / np.sqrt((2 * np.pi) ** 2 + df[f'{signal}_log_decrement'] ** 2)
+        df[f"{signal}_decay_rate"] = np.log(df[f"{signal}_amplitude"] / df[f"{signal}_previous_amplitude"]) / df[f"{signal}_period"]
+        df[f"{signal}_symmetry"] = (1 - (df[f"{signal}_rising_time"] - df[f"{signal}_falling_time"]).abs() / df[f"{signal}_duration"])
 
+    return df
