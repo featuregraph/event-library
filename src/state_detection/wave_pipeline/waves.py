@@ -63,3 +63,62 @@ def add_inter_wave_features(df, signals, group):
         df[f"{signal}_symmetry"] = (1 - (df[f"{signal}_rising_time"] - df[f"{signal}_falling_time"]).abs() / df[f"{signal}_duration"])
 
     return df
+def get_wave_summary(df, signal):
+    summarydf = (
+        df.groupby(f"{signal}_wave_id")
+        .agg(
+            peak_index=(f"{signal}_peak_index", "max"),
+            rise_duration=(f"{signal}_rising", "sum"),
+            fall_duration=(f"{signal}_falling", "sum"),
+            maximum=(f"{signal}", "max"),
+            minimum=(f"{signal}", "min"),
+        )
+        .reset_index()
+        .rename(columns={f"{signal}_wave_id": "oscillation_id"})
+    )
+    
+    summarydf["start_index"] = (
+        summarydf["peak_index"] - summarydf["rise_duration"]
+    )
+    
+    summarydf["end_index"] = (
+        summarydf["peak_index"] + summarydf["fall_duration"]
+    )
+    
+    summarydf["duration"] = (
+        summarydf["rise_duration"] + summarydf["fall_duration"]
+    )
+    
+    summarydf["period"] = (
+        summarydf["peak_index"] - summarydf["peak_index"].shift()
+    )
+    
+    summarydf["amplitude"] = (
+        summarydf["maximum"] - summarydf["minimum"]
+    ) / 2
+    
+    summarydf["temporal_symmetry"] = (
+        1
+        - (
+            summarydf["rise_duration"]
+            - summarydf["fall_duration"]
+        ).abs()
+        / summarydf["duration"]
+    ).where(summarydf["duration"] > 0)
+    
+    summarydf = summarydf[
+        [
+            "oscillation_id",
+            "start_index",
+            "peak_index",
+            "end_index",
+            "rise_duration",
+            "fall_duration",
+            "duration",
+            "period",
+            "amplitude",
+            "temporal_symmetry",
+        ]
+    ]
+    
+    return summarydf
